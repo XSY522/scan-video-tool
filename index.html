@@ -32,8 +32,6 @@ h1{font-size:22px;font-weight:700;margin-bottom:8px}
 .thumb-item{width:48px;height:48px;border-radius:8px;object-fit:cover;border:2px solid #444;cursor:pointer;transition:.2s}
 .thumb-item:hover,.thumb-item.active{border-color:#00c8ff}
 #startBtn{padding:16px 40px;font-size:18px;margin-top:10px}
-.loading-spinner{display:inline-block;width:20px;height:20px;border:3px solid #333;border-top-color:#00c8ff;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
-@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -65,21 +63,40 @@ h1{font-size:22px;font-weight:700;margin-bottom:8px}
 </div>
 
 <script>
-const API = window.location.origin;
+// Supabase 直接连接（无需后端）
+const SB_URL = 'https://oapnoqskorgwpaqxrubf.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hcG5vcXNrb3Jnd3BhcXhydWJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMjgyMTksImV4cCI6MjA5MjcwNDIxOX0.cZ5LuZ6ruOsx5TZurFxsp1p_5pjr--jIM_PXTC_EgTY';
+
 let video, canvas, ctx, stream;
 let items = [];
 let matchCount = {};
-const MATCH_THRESHOLD = 0.85;
+const MATCH_THRESHOLD = 0.80;
 const MATCH_REQUIRED = 4;
 
-// Load all items from API
+async function supabaseFetch(table, filters) {
+  let url = `${SB_URL}/rest/v1/${table}?select=*`;
+  if (filters) {
+    for (const [k, v] of Object.entries(filters)) {
+      url += `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`;
+    }
+  }
+  const res = await fetch(url, {
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': 'Bearer ' + SB_KEY,
+      'Content-Type': 'application/json'
+    }
+  });
+  return res.json();
+}
+
+// Load all active items from Supabase
 async function loadItems() {
   try {
-    const res = await fetch(API + '/api/items');
-    items = await res.json();
+    items = await supabaseFetch('scan_items', { active: 'eq.true', order: 'created_at.desc' });
     renderThumbs();
     if (items.length === 0) {
-      updateStatus('idle', '暂无可识别的图片');
+      updateStatus('idle', '暂无扫描项目');
     }
   } catch (e) {
     updateStatus('idle', '加载失败，请检查网络');
@@ -113,119 +130,81 @@ async function startCamera() {
     video = document.getElementById('video');
     video.srcObject = stream;
     await video.play();
-
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
-
     document.getElementById('startBtn').style.display = 'none';
     updateStatus('scanning', '正在扫描...请对准图片');
     requestAnimationFrame(scanLoop);
   } catch (e) {
-    alert('无法访问摄像头：' + e.message);
+    alert('无法访问摄像头：' + e.message + '\n\n请允许摄像头权限后重试');
   }
 }
 
 function scanLoop() {
-  if (!stream || !video.videoWidth) { requestAnimationFrame(scanLoop); return; }
-
-  // Draw to canvas
+  if (!stream || !video || !video.videoWidth) { requestAnimationFrame(scanLoop); return; }
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   ctx.drawImage(video, 0, 0);
-
-  // Show preview
   const preview = document.getElementById('preview');
   preview.src = canvas.toDataURL('image/jpeg', 0.5);
-
-  // Compare with each item
   compareAll(canvas);
-
   requestAnimationFrame(scanLoop);
 }
 
-function compareAll(sourceCanvas) {
+async function compareAll(sourceCanvas) {
   if (items.length === 0) return;
-
   const sourceData = getFeatures(sourceCanvas);
-
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (!item.image_data) continue;
-
-    const similarity = compareWithImage(item.image_data, sourceData);
+    const similarity = await compareWithImage(item.image_data, sourceData);
     const itemId = item.id;
-
     if (similarity >= MATCH_THRESHOLD) {
       matchCount[itemId] = (matchCount[itemId] || 0) + 1;
-      updateStatus('scanning', `识别中... ${item.title} (${matchCount[itemId]}/${MATCH_REQUIRED})`);
-
+      updateStatus('scanning', `识别中... ${matchCount[itemId]}/${MATCH_REQUIRED}`);
       if (matchCount[itemId] >= MATCH_REQUIRED) {
         matchCount = {};
         showResult(item);
         return;
       }
     } else {
-      // Reset count for this item if not matching
       if (matchCount[itemId] > 0) matchCount[itemId] = Math.max(0, matchCount[itemId] - 1);
     }
   }
 }
 
-// Get image features from a canvas
 function getFeatures(cvs) {
   const w = cvs.width, h = cvs.height;
-  const ctx2 = cvs.getContext('2d');
-  const imageData = ctx2.getImageData(0, 0, w, h).data;
-
-  // Downsample for speed
+  const imgData = cvs.getContext('2d').getImageData(0, 0, w, h).data;
   const step = Math.max(1, Math.floor(w * h / 5000));
-  let rSum = 0, gSum = 0, bSum = 0, count = 0;
-  let edgeCount = 0;
-
+  let rSum = 0, gSum = 0, bSum = 0, count = 0, edgeCount = 0;
   for (let y = 1; y < h - 1; y += step) {
     for (let x = 1; x < w - 1; x += step) {
       const idx = (y * w + x) * 4;
-      rSum += imageData[idx]; gSum += imageData[idx+1]; bSum += imageData[idx+2];
-      count++;
-
-      // Simple edge detection
+      rSum += imgData[idx]; gSum += imgData[idx+1]; bSum += imgData[idx+2]; count++;
       const idxR = ((y+1)*w+x)*4, idxD=(y*w+(x+1))*4;
-      const diff = Math.abs(imageData[idx]-imageData[idxR]) + Math.abs(imageData[idx]-imageData[idxD]);
+      const diff = Math.abs(imgData[idx]-imgData[idxR]) + Math.abs(imgData[idx]-imgData[idxD]);
       if (diff > 40) edgeCount++;
     }
   }
-
-  return {
-    avgColor: [rSum/count, gSum/count, bSum/count],
-    edgeRatio: edgeCount / count,
-    pixelCount: count
-  };
+  return { avgColor: [rSum/count, gSum/count, bSum/count], edgeRatio: edgeCount / count };
 }
 
-// Compare source features with a stored image data URL
 function compareWithImage(imgDataUrl, sourceFeatures) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
       const tc = document.createElement('canvas');
       tc.width = img.width; tc.height = img.height;
-      const tctx = tc.getContext('2d');
-      tctx.drawImage(img, 0, 0);
-      const targetFeatures = getFeatures(tc);
-
-      // Color similarity (weight 40%)
-      const colorDiff = Math.abs(sourceFeatures.avgColor[0] - targetFeatures.avgColor[0]) +
-                        Math.abs(sourceFeatures.avgColor[1] - targetFeatures.avgColor[1]) +
-                        Math.abs(sourceFeatures.avgColor[2] - targetFeatures.avgColor[2]);
+      tc.getContext('2d').drawImage(img, 0, 0);
+      const tf = getFeatures(tc);
+      const colorDiff = Math.abs(sourceFeatures.avgColor[0]-tf.avgColor[0]) +
+                        Math.abs(sourceFeatures.avgColor[1]-tf.avgColor[1]) +
+                        Math.abs(sourceFeatures.avgColor[2]-tf.avgColor[2]);
       const colorSim = Math.max(0, 1 - colorDiff / 400);
-
-      // Edge similarity (weight 30%)
-      const edgeDiff = Math.abs(sourceFeatures.edgeRatio - targetFeatures.edgeRatio);
+      const edgeDiff = Math.abs(sourceFeatures.edgeRatio - tf.edgeRatio);
       const edgeSim = Math.max(0, 1 - edgeDiff / 0.15);
-
-      // Combined score
-      const total = colorSim * 0.5 + edgeSim * 0.5;
-      resolve(total);
+      resolve(colorSim * 0.5 + edgeSim * 0.5);
     };
     img.onerror = () => resolve(0);
     img.src = imgDataUrl;
@@ -238,10 +217,8 @@ function showResult(item) {
   document.getElementById('watchBtn').href = item.video_url;
   document.getElementById('overlay').style.display = 'block';
   document.getElementById('resultCard').style.display = 'block';
-
-  // Reset match counts
   matchCount = {};
-  updateStatus('active', '✅ 识别成功：' + (item.title || '视频'));
+  updateStatus('active', '✅ 识别成功');
 }
 
 function closeResult() {
@@ -250,7 +227,6 @@ function closeResult() {
   updateStatus('scanning', '继续扫描...');
 }
 
-// Init
 loadItems();
 </script>
 </body>
