@@ -7,99 +7,111 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0a0a0a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
-#container{position:relative;width:100%;max-width:500px;text-align:center}
-video{display:none}
-canvas{display:none}
-#preview{width:280px;height:280px;border-radius:16px;background:#111;border:2px solid #333;object-fit:cover;margin-bottom:20px}
-.scan-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:200px;border:3px solid rgba(0,200,255,0.6);border-radius:16px;pointer-events:none;z-index:10}
-.scan-line{position:absolute;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,transparent,#00c8ff,transparent);animation:scan 2s linear infinite;border-radius:2px}
-@keyframes scan{0%{top:0}50%{top:calc(100% - 3px)}100%{top:0}}
-.status-dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;background:#555;transition:.3s}
-.status-dot.active{background:#00ff88;box-shadow:0 0 10px #00ff88}
-.status-dot.scanning{background:#00c8ff;animation:pulse 1s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-h1{font-size:22px;font-weight:700;margin-bottom:8px}
-.subtitle{font-size:14px;color:#888;margin-bottom:24px}
-#statusBar{font-size:14px;color:#aaa;margin-bottom:16px;display:flex;align-items:center;justify-content:center}
-#resultCard{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;color:#222;width:90%;max-width:360px;border-radius:20px;padding:24px;text-align:center;z-index:100;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#container{position:relative;width:100%;max-width:500px;text-align:center;padding:0 16px}
+.scan-frame{position:relative;width:280px;height:280px;border-radius:16px;border:3px solid rgba(0,200,255,0.5);margin:0 auto 20px;overflow:hidden;background:#111}
+.scan-line{position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,#00c8ff,transparent);animation:scan 2s linear infinite}
+@keyframes scan{0%{top:0}50%{top:calc(100% - 2px)}100%{top:0}}
+video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
+canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2}
+img#previewFrame{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:3;display:none}
+video.hidden{display:none}
+.scan-mask{position:absolute;inset:0;z-index:4;pointer-events:none}
+h1{font-size:22px;font-weight:700;margin-bottom:6px}
+.subtitle{font-size:14px;color:#666;margin-bottom:20px}
+#statusBar{font-size:14px;color:#aaa;margin-bottom:16px;display:flex;align-items:center;justify-content:center;min-height:24px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;background:#444;transition:.3s;flex-shrink:0}
+.dot.active{background:#00ff88;box-shadow:0 0 8px #00ff88}
+.dot.scanning{background:#00c8ff;animation:pulse 1s infinite}
+.dot.error{background:#ff4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#startBtn{padding:14px 36px;font-size:17px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:30px;cursor:pointer;font-weight:600;margin-bottom:20px}
+.thumb-row{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.thumb-item{width:44px;height:44px;border-radius:8px;object-fit:cover;border:2px solid #333;cursor:pointer;transition:.2s}
+.thumb-item:hover,.thumb-item.active{border-color:#00c8ff}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:98}
+#resultCard{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;color:#222;width:90%;max-width:360px;border-radius:20px;padding:24px;text-align:center;z-index:99;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 #resultCard img{width:120px;height:120px;object-fit:cover;border-radius:12px;margin-bottom:12px}
 #resultCard h3{font-size:18px;margin-bottom:8px}
 #resultCard p{font-size:13px;color:#666;margin-bottom:16px}
-.btn-primary{display:inline-block;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:14px 36px;border-radius:30px;font-size:16px;font-weight:600;text-decoration:none;cursor:pointer;border:none}
-.btn-secondary{display:inline-block;background:#f0f0f0;color:#333;padding:12px 28px;border-radius:24px;font-size:14px;text-decoration:none;cursor:pointer;border:none;margin-top:8px}
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99}
-.thumb-row{display:flex;justify-content:center;gap:8px;margin-top:16px;flex-wrap:wrap}
-.thumb-item{width:48px;height:48px;border-radius:8px;object-fit:cover;border:2px solid #444;cursor:pointer;transition:.2s}
-.thumb-item:hover,.thumb-item.active{border-color:#00c8ff}
-#startBtn{padding:16px 40px;font-size:18px;margin-top:10px}
+.btn-primary{display:inline-block;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:13px 32px;border-radius:30px;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer;border:none}
+.btn-secondary{display:inline-block;background:#f0f0f0;color:#333;padding:11px 24px;border-radius:24px;font-size:13px;text-decoration:none;cursor:pointer;border:none;margin-top:8px}
 </style>
 </head>
 <body>
 
 <div id="container">
-  <div class="scan-frame"><div class="scan-line"></div></div>
-  <video id="video" autoplay playsinline></video>
-  <canvas id="canvas"></canvas>
-  <img id="preview" src="" alt="Camera preview">
+  <div class="scan-frame" id="scanFrame">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+    <img id="previewFrame" alt="">
+    <div class="scan-line"></div>
+  </div>
 
   <h1>📷 扫图识视频</h1>
   <p class="subtitle">对准图片，自动识别并跳转视频</p>
 
-  <div id="statusBar"><span class="status-dot" id="dot"></span><span id="statusText">点击下方按钮开始扫描</span></div>
+  <div id="statusBar">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">加载中...</span>
+  </div>
 
-  <button class="btn-primary" id="startBtn" onclick="startCamera()">🎯 开始扫描</button>
+  <button id="startBtn" onclick="startCamera()">🎯 开始扫描</button>
 
   <div class="thumb-row" id="thumbRow"></div>
 </div>
 
 <div class="overlay" id="overlay" onclick="closeResult()"></div>
 <div id="resultCard">
-  <img id="resultImg" src="">
+  <img id="resultImg" src="" alt="">
   <h3 id="resultTitle"></h3>
-  <p id="resultDesc">识别成功！点击下方按钮观看视频</p>
-  <a href="#" target="_blank" class="btn-primary" id="watchBtn">▶ 点击观看视频</a>
+  <p>识别成功！点击下方按钮观看视频</p>
+  <a href="#" class="btn-primary" id="watchBtn" target="_blank">▶ 点击观看视频</a>
   <br>
   <button class="btn-secondary" onclick="closeResult()">继续扫描</button>
 </div>
 
 <script>
-// Supabase 直接连接（无需后端）
+// Supabase config (anon key is public-safe with RLS)
 const SB_URL = 'https://oapnoqskorgwpaqxrubf.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hcG5vcXNrb3Jnd3BhcXhydWJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMjgyMTksImV4cCI6MjA5MjcwNDIxOX0.cZ5LuZ6ruOsx5TZurFxsp1p_5pjr--jIM_PXTC_EgTY';
 
 let video, canvas, ctx, stream;
 let items = [];
 let matchCount = {};
-const MATCH_THRESHOLD = 0.80;
+let currentMode = 'idle';
+const MATCH_THRESHOLD = 0.78;
 const MATCH_REQUIRED = 4;
 
-async function supabaseFetch(table, filters) {
-  let url = `${SB_URL}/rest/v1/${table}?select=*`;
-  if (filters) {
-    for (const [k, v] of Object.entries(filters)) {
-      url += `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`;
-    }
-  }
-  const res = await fetch(url, {
-    headers: {
-      'apikey': SB_KEY,
-      'Authorization': 'Bearer ' + SB_KEY,
-      'Content-Type': 'application/json'
-    }
-  });
-  return res.json();
+function updateStatus(state, text) {
+  const dot = document.getElementById('dot');
+  dot.className = 'dot';
+  if (state === 'active') dot.classList.add('active');
+  else if (state === 'scanning') dot.classList.add('scanning');
+  else if (state === 'error') dot.classList.add('error');
+  document.getElementById('statusText').textContent = text;
 }
 
-// Load all active items from Supabase
+// Load items from Supabase
 async function loadItems() {
   try {
-    items = await supabaseFetch('scan_items', { active: 'eq.true', order: 'created_at.desc' });
+    const r = await fetch(`${SB_URL}/rest/v1/scan_items?active=eq.true&select=id,title,image_data,video_url&order=created_at.desc&limit=50`, {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    if (r.ok) {
+      const data = await r.json();
+      items = data.map(i => ({ id: i.id, title: i.title, image: i.image_data, videoUrl: i.video_url }));
+    } else {
+      items = [];
+    }
     renderThumbs();
     if (items.length === 0) {
-      updateStatus('idle', '暂无扫描项目');
+      updateStatus('idle', '暂无扫描项目，请先在后台添加');
+    } else {
+      updateStatus('idle', `已加载 ${items.length} 个项目`);
     }
   } catch (e) {
-    updateStatus('idle', '加载失败，请检查网络');
+    updateStatus('error', '加载失败');
+    items = [];
   }
 }
 
@@ -108,7 +120,7 @@ function renderThumbs() {
   row.innerHTML = '';
   items.forEach((item, i) => {
     const img = document.createElement('img');
-    img.src = item.image_data;
+    img.src = item.image;
     img.className = 'thumb-item';
     img.title = item.title || ('视频 ' + (i + 1));
     img.onclick = () => showResult(item);
@@ -116,27 +128,25 @@ function renderThumbs() {
   });
 }
 
-function updateStatus(state, text) {
-  const dot = document.getElementById('dot');
-  dot.className = 'status-dot';
-  if (state === 'active') dot.classList.add('active');
-  else if (state === 'scanning') dot.classList.add('scanning');
-  document.getElementById('statusText').textContent = text;
-}
-
 async function startCamera() {
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } } });
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
+    });
     video = document.getElementById('video');
     video.srcObject = stream;
     await video.play();
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
-    document.getElementById('startBtn').style.display = 'none';
+    currentMode = 'scanning';
+    document.getElementById('startBtn').textContent = '🔄 扫描中...';
     updateStatus('scanning', '正在扫描...请对准图片');
+    document.getElementById('previewFrame').style.display = 'none';
+    video.classList.remove('hidden');
     requestAnimationFrame(scanLoop);
   } catch (e) {
-    alert('无法访问摄像头：' + e.message + '\n\n请允许摄像头权限后重试');
+    updateStatus('error', '摄像头权限被拒绝');
+    alert('无法访问摄像头：' + e.message + '\n请允许摄像头权限后重试');
   }
 }
 
@@ -145,86 +155,96 @@ function scanLoop() {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   ctx.drawImage(video, 0, 0);
-  const preview = document.getElementById('preview');
-  preview.src = canvas.toDataURL('image/jpeg', 0.5);
-  compareAll(canvas);
+  if (currentMode === 'scanning') compareAll(canvas);
   requestAnimationFrame(scanLoop);
+}
+
+function getFeatures(sourceCanvas) {
+  const w = sourceCanvas.width, h = sourceCanvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h).data;
+  const step = Math.max(1, Math.floor(w * h / 5000));
+  let rS = 0, gS = 0, bS = 0, cnt = 0, edgeS = 0;
+  for (let y = 1; y < h - 1; y += step) {
+    for (let x = 1; x < w - 1; x += step) {
+      const i = (y * w + x) * 4;
+      rS += imgData[i]; gS += imgData[i+1]; bS += imgData[i+2]; cnt++;
+      const diff = Math.abs(imgData[i]-imgData[(y+1)*w*4]) + Math.abs(imgData[i]-imgData[i+4]);
+      if (diff > 40) edgeS++;
+    }
+  }
+  return { avg: [rS/cnt, gS/cnt, bS/cnt], edge: edgeS / cnt };
+}
+
+async function compareWithImage(targetDataUrl, srcFeat) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const tctx = c.getContext('2d');
+      tctx.drawImage(img, 0, 0);
+      const w = c.width, h = c.height;
+      const data = tctx.getImageData(0, 0, w, h).data;
+      const step = Math.max(1, Math.floor(w * h / 5000));
+      let rS = 0, gS = 0, bS = 0, cnt = 0, edgeS = 0;
+      for (let y = 1; y < h - 1; y += step) {
+        for (let x = 1; x < w - 1; x += step) {
+          const i = (y * w + x) * 4;
+          rS += data[i]; gS += data[i+1]; bS += data[i+2]; cnt++;
+          const diff = Math.abs(data[i]-data[(y+1)*w*4]) + Math.abs(data[i]-data[i+4]);
+          if (diff > 40) edgeS++;
+        }
+      }
+      const tAvg = [rS/cnt, gS/cnt, bS/cnt];
+      const tEdge = edgeS / cnt;
+      const colorDiff = Math.abs(srcFeat.avg[0]-tAvg[0]) + Math.abs(srcFeat.avg[1]-tAvg[1]) + Math.abs(srcFeat.avg[2]-tAvg[2]);
+      const colorSim = Math.max(0, 1 - colorDiff / 400);
+      const edgeDiff = Math.abs(srcFeat.edge - tEdge);
+      const edgeSim = Math.max(0, 1 - edgeDiff / 0.15);
+      resolve(colorSim * 0.5 + edgeSim * 0.5);
+    };
+    img.onerror = () => resolve(0);
+    img.src = targetDataUrl;
+  });
 }
 
 async function compareAll(sourceCanvas) {
   if (items.length === 0) return;
-  const sourceData = getFeatures(sourceCanvas);
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (!item.image_data) continue;
-    const similarity = await compareWithImage(item.image_data, sourceData);
-    const itemId = item.id;
-    if (similarity >= MATCH_THRESHOLD) {
-      matchCount[itemId] = (matchCount[itemId] || 0) + 1;
-      updateStatus('scanning', `识别中... ${matchCount[itemId]}/${MATCH_REQUIRED}`);
-      if (matchCount[itemId] >= MATCH_REQUIRED) {
+  const srcFeat = getFeatures(sourceCanvas);
+  for (const item of items) {
+    const sim = await compareWithImage(item.image, srcFeat);
+    if (sim >= MATCH_THRESHOLD) {
+      matchCount[item.id] = (matchCount[item.id] || 0) + 1;
+      updateStatus('scanning', `识别中 ${matchCount[item.id]}/${MATCH_REQUIRED}`);
+      if (matchCount[item.id] >= MATCH_REQUIRED) {
         matchCount = {};
         showResult(item);
         return;
       }
     } else {
-      if (matchCount[itemId] > 0) matchCount[itemId] = Math.max(0, matchCount[itemId] - 1);
+      if (matchCount[item.id] > 0) matchCount[item.id] = Math.max(0, matchCount[item.id] - 1);
     }
   }
-}
-
-function getFeatures(cvs) {
-  const w = cvs.width, h = cvs.height;
-  const imgData = cvs.getContext('2d').getImageData(0, 0, w, h).data;
-  const step = Math.max(1, Math.floor(w * h / 5000));
-  let rSum = 0, gSum = 0, bSum = 0, count = 0, edgeCount = 0;
-  for (let y = 1; y < h - 1; y += step) {
-    for (let x = 1; x < w - 1; x += step) {
-      const idx = (y * w + x) * 4;
-      rSum += imgData[idx]; gSum += imgData[idx+1]; bSum += imgData[idx+2]; count++;
-      const idxR = ((y+1)*w+x)*4, idxD=(y*w+(x+1))*4;
-      const diff = Math.abs(imgData[idx]-imgData[idxR]) + Math.abs(imgData[idx]-imgData[idxD]);
-      if (diff > 40) edgeCount++;
-    }
-  }
-  return { avgColor: [rSum/count, gSum/count, bSum/count], edgeRatio: edgeCount / count };
-}
-
-function compareWithImage(imgDataUrl, sourceFeatures) {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.onload = () => {
-      const tc = document.createElement('canvas');
-      tc.width = img.width; tc.height = img.height;
-      tc.getContext('2d').drawImage(img, 0, 0);
-      const tf = getFeatures(tc);
-      const colorDiff = Math.abs(sourceFeatures.avgColor[0]-tf.avgColor[0]) +
-                        Math.abs(sourceFeatures.avgColor[1]-tf.avgColor[1]) +
-                        Math.abs(sourceFeatures.avgColor[2]-tf.avgColor[2]);
-      const colorSim = Math.max(0, 1 - colorDiff / 400);
-      const edgeDiff = Math.abs(sourceFeatures.edgeRatio - tf.edgeRatio);
-      const edgeSim = Math.max(0, 1 - edgeDiff / 0.15);
-      resolve(colorSim * 0.5 + edgeSim * 0.5);
-    };
-    img.onerror = () => resolve(0);
-    img.src = imgDataUrl;
-  });
 }
 
 function showResult(item) {
-  document.getElementById('resultImg').src = item.image_data;
-  document.getElementById('resultTitle').textContent = item.title || '找到匹配视频';
-  document.getElementById('watchBtn').href = item.video_url;
+  currentMode = 'idle';
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  document.getElementById('resultImg').src = item.image;
+  document.getElementById('resultTitle').textContent = item.title || '找到视频';
+  document.getElementById('watchBtn').href = item.videoUrl;
   document.getElementById('overlay').style.display = 'block';
   document.getElementById('resultCard').style.display = 'block';
-  matchCount = {};
   updateStatus('active', '✅ 识别成功');
 }
 
 function closeResult() {
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('resultCard').style.display = 'none';
-  updateStatus('scanning', '继续扫描...');
+  updateStatus('idle', '点击下方按钮继续扫描');
+  document.getElementById('startBtn').textContent = '🎯 开始扫描';
+  matchCount = {};
 }
 
 loadItems();
