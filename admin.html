@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Scan Video - 管理后台</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#222;min-height:100vh;padding:20px}
+.header{text-align:center;margin-bottom:30px}
+.header h1{font-size:28px;font-weight:800;background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+.header p{font-size:14px;color:#888}
+
+.upload-zone{max-width:600px;margin:0 auto 30px;background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.upload-zone h2{font-size:18px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.upload-area{border:2px dashed #ccc;border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:.3s;background:#fafafa}
+.upload-area:hover,.upload-area.dragover{border-color:#667eea;background:#f0eeff}
+.upload-area input[type=file]{display:none}
+.upload-icon{font-size:48px;margin-bottom:10px}
+.upload-hint{font-size:14px;color:#888}
+.form-row{margin-top:16px}
+.form-row label{display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:4px}
+.form-row input{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:14px;transition:.2s;outline:none}
+.form-row input:focus{border-color:#667eea}
+.btn-upload{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;margin-top:16px;transition:.2s}
+.btn-upload:hover{opacity:.9}
+.btn-upload:disabled{opacity:.5;cursor:not-allowed}
+
+.items-list{max-width:600px;margin:0 auto}
+.items-list h2{font-size:18px;font-weight:700;margin-bottom:16px;text-align:center}
+.item-card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.04);display:flex;gap:16px;align-items:center}
+.item-thumb{width:80px;height:80px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid #eee}
+.item-info{flex:1;min-width:0}
+.item-info h3{font-size:15px;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-info .url{font-size:12px;color:#666;word-break:break-all;margin-bottom:6px}
+.item-info .meta{font-size:11px;color:#999}
+.item-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.btn-sm{padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid #ddd;background:#fff;transition:.2s}
+.btn-sm:hover{border-color:#667eea;color:#667eea}
+.btn-danger{color:#dc3545;border-color:#f5c6cb}
+.btn-danger:hover{background:#dc3545;color:#fff;border-color:#dc3545}
+.toggle-btn{padding:6px 14px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid #ddd;background:#fff;transition:.2s}
+.toggle-btn.on{background:#d4edda;color:#155724;border-color:#c3e6cb}
+.toggle-btn.off{background:#fff;color:#666}
+
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:999;animation:fadeInOut 2.5s forwards}
+@keyframes fadeInOut{0%{opacity:0;top:-20px}15%{opacity:1;top:20px}85%{opacity:1;top:20px}100%{opacity:0;top:-20px}}
+
+.empty-state{text-align:center;padding:60px 20px;color:#aaa}
+.empty-icon{font-size:64px;margin-bottom:12px}
+.empty-text{font-size:16px}
+
+@media(max-width:480px){
+  body{padding:12px}
+  .item-card{flex-direction:column;text-align:center}
+  .item-actions{flex-direction:row;justify-content:center}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🎬 Scan Video 管理后台</h1>
+  <p>上传图片 + 视频链接，生成可扫描的图片识别项目</p>
+</div>
+
+<div class="upload-zone">
+  <h2>➕ 添加新项目</h2>
+  <div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-icon">📷</div>
+    <div class="upload-hint">点击或拖拽上传图片（支持 JPG/PNG）</div>
+    <input type="file" id="fileInput" accept="image/*" onchange="handleFile(this.files[0])">
+    <img id="previewImg" style="max-width:200px;max-height:150px;border-radius:8px;margin-top:12px;display:none">
+  </div>
+  <div class="form-row">
+    <label>标题（选填）</label>
+    <input type="text" id="titleInput" placeholder="例如：产品宣传视频">
+  </div>
+  <div class="form-row">
+    <label>视频链接 *</label>
+    <input type="url" id="videoUrlInput" placeholder="https://youtube.com/watch?v=xxx 或 https://tiktok.com/...">
+  </div>
+  <button class="btn-upload" id="submitBtn" onclick="submitUpload()" disabled>🚀 上传并生成</button>
+</div>
+
+<div class="items-list">
+  <h2>📋 已有项目 (<span id="itemCount">0</span>)</h2>
+  <div id="itemsContainer"></div>
+</div>
+
+<script>
+const API = window.location.origin;
+let selectedFile = null;
+
+// Drag & drop
+const dropZone = document.getElementById('dropZone');
+['dragenter','dragover'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('dragover'); }));
+['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('dragover'); }));
+dropZone.addEventListener('drop', ev => {
+  if (ev.dataTransfer.files.length) handleFile(ev.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  if (!file || !file.type.startsWith('image/')) return toast('请选择图片文件');
+  selectedFile = file;
+  const preview = document.getElementById('previewImg');
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = 'block';
+  checkForm();
+}
+
+function checkForm() {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = !(selectedFile && document.getElementById('videoUrlInput').value.trim());
+}
+
+document.getElementById('videoUrlInput').addEventListener('input', checkForm);
+
+async function submitUpload() {
+  if (!selectedFile) return toast('请先选择图片');
+  const videoUrl = document.getElementById('videoUrlInput').value.trim();
+  if (!videoUrl) return toast('请输入视频链接');
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 上传中...';
+
+  const fd = new FormData();
+  fd.append('image', selectedFile);
+  fd.append('title', document.getElementById('titleInput').value.trim() || '未命名');
+  fd.append('videoUrl', videoUrl);
+
+  try {
+    const res = await fetch(API + '/api/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+
+    if (data.success) {
+      toast('✅ 上传成功！');
+      // Reset form
+      selectedFile = null;
+      document.getElementById('previewImg').style.display = 'none';
+      document.getElementById('titleInput').value = '';
+      document.getElementById('videoUrlInput').value = '';
+      document.getElementById('fileInput').value = '';
+      loadItems();
+    } else {
+      toast('❌ ' + (data.error || '上传失败'));
+    }
+  } catch (e) {
+    toast('❌ 网络错误：' + e.message);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '🚀 上传并生成';
+}
+
+async function loadItems() {
+  try {
+    const res = await fetch(API + '/api/items');
+    const items = await res.json();
+    const container = document.getElementById('itemsContainer');
+    document.getElementById('itemCount').textContent = items.length;
+
+    if (items.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">还没有任何项目<br>上传第一个吧！</div></div>';
+      return;
+    }
+
+    container.innerHTML = items.map(item => `
+      <div class="item-card">
+        <img src="${item.image_data}" class="item-thumb" alt="${item.title}">
+        <div class="item-info">
+          <h3>${item.title}</h3>
+          <div class="url">${item.video_url}</div>
+          <div class="meta">${new Date(item.created_at).toLocaleString('zh-CN')}</div>
+        </div>
+        <div class="item-actions">
+          <button class="toggle-btn ${item.active ? 'on' : 'off'}" onclick="toggleItem('${item.id}')">${item.active ? '✓ 启用' : '已禁用'}</button>
+          <button class="btn-sm btn-danger" onclick="deleteItem('${item.id}')">🗑 删除</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function toggleItem(id) {
+  try {
+    const res = await fetch(API + '/api/item/' + id + '/toggle', { method: 'PATCH' });
+    const data = await res.json();
+    if (data.success) loadItems();
+  } catch (e) {}
+}
+
+async function deleteItem(id) {
+  if (!confirm('确定删除这个项目吗？')) return;
+  try {
+    await fetch(API + '/api/item/' + id, { method: 'DELETE' });
+    toast('🗑 已删除');
+    loadItems();
+  } catch (e) {}
+}
+
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+loadItems();
+</script>
+</body>
+</html>
