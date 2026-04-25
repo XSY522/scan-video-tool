@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Scan Video - 扫图跳转</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#container{position:relative;width:100%;max-width:500px;text-align:center}
+video{display:none}
+canvas{display:none}
+#preview{width:280px;height:280px;border-radius:16px;background:#111;border:2px solid #333;object-fit:cover;margin-bottom:20px}
+.scan-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:200px;border:3px solid rgba(0,200,255,0.6);border-radius:16px;pointer-events:none;z-index:10}
+.scan-line{position:absolute;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,transparent,#00c8ff,transparent);animation:scan 2s linear infinite;border-radius:2px}
+@keyframes scan{0%{top:0}50%{top:calc(100% - 3px)}100%{top:0}}
+.status-dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;background:#555;transition:.3s}
+.status-dot.active{background:#00ff88;box-shadow:0 0 10px #00ff88}
+.status-dot.scanning{background:#00c8ff;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+h1{font-size:22px;font-weight:700;margin-bottom:8px}
+.subtitle{font-size:14px;color:#888;margin-bottom:24px}
+#statusBar{font-size:14px;color:#aaa;margin-bottom:16px;display:flex;align-items:center;justify-content:center}
+#resultCard{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;color:#222;width:90%;max-width:360px;border-radius:20px;padding:24px;text-align:center;z-index:100;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#resultCard img{width:120px;height:120px;object-fit:cover;border-radius:12px;margin-bottom:12px}
+#resultCard h3{font-size:18px;margin-bottom:8px}
+#resultCard p{font-size:13px;color:#666;margin-bottom:16px}
+.btn-primary{display:inline-block;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:14px 36px;border-radius:30px;font-size:16px;font-weight:600;text-decoration:none;cursor:pointer;border:none}
+.btn-secondary{display:inline-block;background:#f0f0f0;color:#333;padding:12px 28px;border-radius:24px;font-size:14px;text-decoration:none;cursor:pointer;border:none;margin-top:8px}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99}
+.thumb-row{display:flex;justify-content:center;gap:8px;margin-top:16px;flex-wrap:wrap}
+.thumb-item{width:48px;height:48px;border-radius:8px;object-fit:cover;border:2px solid #444;cursor:pointer;transition:.2s}
+.thumb-item:hover,.thumb-item.active{border-color:#00c8ff}
+#startBtn{padding:16px 40px;font-size:18px;margin-top:10px}
+.loading-spinner{display:inline-block;width:20px;height:20px;border:3px solid #333;border-top-color:#00c8ff;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div id="container">
+  <div class="scan-frame"><div class="scan-line"></div></div>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+  <img id="preview" src="" alt="Camera preview">
+
+  <h1>📷 扫图识视频</h1>
+  <p class="subtitle">对准图片，自动识别并跳转视频</p>
+
+  <div id="statusBar"><span class="status-dot" id="dot"></span><span id="statusText">点击下方按钮开始扫描</span></div>
+
+  <button class="btn-primary" id="startBtn" onclick="startCamera()">🎯 开始扫描</button>
+
+  <div class="thumb-row" id="thumbRow"></div>
+</div>
+
+<div class="overlay" id="overlay" onclick="closeResult()"></div>
+<div id="resultCard">
+  <img id="resultImg" src="">
+  <h3 id="resultTitle"></h3>
+  <p id="resultDesc">识别成功！点击下方按钮观看视频</p>
+  <a href="#" target="_blank" class="btn-primary" id="watchBtn">▶ 点击观看视频</a>
+  <br>
+  <button class="btn-secondary" onclick="closeResult()">继续扫描</button>
+</div>
+
+<script>
+const API = window.location.origin;
+let video, canvas, ctx, stream;
+let items = [];
+let matchCount = {};
+const MATCH_THRESHOLD = 0.85;
+const MATCH_REQUIRED = 4;
+
+// Load all items from API
+async function loadItems() {
+  try {
+    const res = await fetch(API + '/api/items');
+    items = await res.json();
+    renderThumbs();
+    if (items.length === 0) {
+      updateStatus('idle', '暂无可识别的图片');
+    }
+  } catch (e) {
+    updateStatus('idle', '加载失败，请检查网络');
+  }
+}
+
+function renderThumbs() {
+  const row = document.getElementById('thumbRow');
+  row.innerHTML = '';
+  items.forEach((item, i) => {
+    const img = document.createElement('img');
+    img.src = item.image_data;
+    img.className = 'thumb-item';
+    img.title = item.title || ('视频 ' + (i + 1));
+    img.onclick = () => showResult(item);
+    row.appendChild(img);
+  });
+}
+
+function updateStatus(state, text) {
+  const dot = document.getElementById('dot');
+  dot.className = 'status-dot';
+  if (state === 'active') dot.classList.add('active');
+  else if (state === 'scanning') dot.classList.add('scanning');
+  document.getElementById('statusText').textContent = text;
+}
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } } });
+    video = document.getElementById('video');
+    video.srcObject = stream;
+    await video.play();
+
+    canvas = document.getElementById('canvas');
+    ctx = canvas.getContext('2d');
+
+    document.getElementById('startBtn').style.display = 'none';
+    updateStatus('scanning', '正在扫描...请对准图片');
+    requestAnimationFrame(scanLoop);
+  } catch (e) {
+    alert('无法访问摄像头：' + e.message);
+  }
+}
+
+function scanLoop() {
+  if (!stream || !video.videoWidth) { requestAnimationFrame(scanLoop); return; }
+
+  // Draw to canvas
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+
+  // Show preview
+  const preview = document.getElementById('preview');
+  preview.src = canvas.toDataURL('image/jpeg', 0.5);
+
+  // Compare with each item
+  compareAll(canvas);
+
+  requestAnimationFrame(scanLoop);
+}
+
+function compareAll(sourceCanvas) {
+  if (items.length === 0) return;
+
+  const sourceData = getFeatures(sourceCanvas);
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item.image_data) continue;
+
+    const similarity = compareWithImage(item.image_data, sourceData);
+    const itemId = item.id;
+
+    if (similarity >= MATCH_THRESHOLD) {
+      matchCount[itemId] = (matchCount[itemId] || 0) + 1;
+      updateStatus('scanning', `识别中... ${item.title} (${matchCount[itemId]}/${MATCH_REQUIRED})`);
+
+      if (matchCount[itemId] >= MATCH_REQUIRED) {
+        matchCount = {};
+        showResult(item);
+        return;
+      }
+    } else {
+      // Reset count for this item if not matching
+      if (matchCount[itemId] > 0) matchCount[itemId] = Math.max(0, matchCount[itemId] - 1);
+    }
+  }
+}
+
+// Get image features from a canvas
+function getFeatures(cvs) {
+  const w = cvs.width, h = cvs.height;
+  const ctx2 = cvs.getContext('2d');
+  const imageData = ctx2.getImageData(0, 0, w, h).data;
+
+  // Downsample for speed
+  const step = Math.max(1, Math.floor(w * h / 5000));
+  let rSum = 0, gSum = 0, bSum = 0, count = 0;
+  let edgeCount = 0;
+
+  for (let y = 1; y < h - 1; y += step) {
+    for (let x = 1; x < w - 1; x += step) {
+      const idx = (y * w + x) * 4;
+      rSum += imageData[idx]; gSum += imageData[idx+1]; bSum += imageData[idx+2];
+      count++;
+
+      // Simple edge detection
+      const idxR = ((y+1)*w+x)*4, idxD=(y*w+(x+1))*4;
+      const diff = Math.abs(imageData[idx]-imageData[idxR]) + Math.abs(imageData[idx]-imageData[idxD]);
+      if (diff > 40) edgeCount++;
+    }
+  }
+
+  return {
+    avgColor: [rSum/count, gSum/count, bSum/count],
+    edgeRatio: edgeCount / count,
+    pixelCount: count
+  };
+}
+
+// Compare source features with a stored image data URL
+function compareWithImage(imgDataUrl, sourceFeatures) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const tc = document.createElement('canvas');
+      tc.width = img.width; tc.height = img.height;
+      const tctx = tc.getContext('2d');
+      tctx.drawImage(img, 0, 0);
+      const targetFeatures = getFeatures(tc);
+
+      // Color similarity (weight 40%)
+      const colorDiff = Math.abs(sourceFeatures.avgColor[0] - targetFeatures.avgColor[0]) +
+                        Math.abs(sourceFeatures.avgColor[1] - targetFeatures.avgColor[1]) +
+                        Math.abs(sourceFeatures.avgColor[2] - targetFeatures.avgColor[2]);
+      const colorSim = Math.max(0, 1 - colorDiff / 400);
+
+      // Edge similarity (weight 30%)
+      const edgeDiff = Math.abs(sourceFeatures.edgeRatio - targetFeatures.edgeRatio);
+      const edgeSim = Math.max(0, 1 - edgeDiff / 0.15);
+
+      // Combined score
+      const total = colorSim * 0.5 + edgeSim * 0.5;
+      resolve(total);
+    };
+    img.onerror = () => resolve(0);
+    img.src = imgDataUrl;
+  });
+}
+
+function showResult(item) {
+  document.getElementById('resultImg').src = item.image_data;
+  document.getElementById('resultTitle').textContent = item.title || '找到匹配视频';
+  document.getElementById('watchBtn').href = item.video_url;
+  document.getElementById('overlay').style.display = 'block';
+  document.getElementById('resultCard').style.display = 'block';
+
+  // Reset match counts
+  matchCount = {};
+  updateStatus('active', '✅ 识别成功：' + (item.title || '视频'));
+}
+
+function closeResult() {
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('resultCard').style.display = 'none';
+  updateStatus('scanning', '继续扫描...');
+}
+
+// Init
+loadItems();
+</script>
+</body>
+</html>
