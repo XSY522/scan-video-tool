@@ -63,8 +63,8 @@ h1{font-size:22px;font-weight:700;margin-bottom:6px}
   </div>
 
   <div class="btn-group">
-    <button id="startBtn" onclick="startCamera()">🎯 拍照扫描</button>
-    <button id="albumBtn" onclick="openAlbum()">📁 从相册选择</button>
+    <button id="startBtn" onclick="startCamera()">🎯 拍照识别<br><small style="font-size:11px;font-weight:400;opacity:.7">photo recognition</small></button>
+    <button id="albumBtn" onclick="openAlbum()">📁 从相册选择<br><small style="font-size:11px;font-weight:400;opacity:.7">Select from album</small></button>
   </div>
 
   <button id="resetBtn" onclick="resetToIdle()">↩ 返回</button>
@@ -154,7 +154,7 @@ async function startCamera() {
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
     currentMode = 'scanning';
-    document.getElementById('startBtn').textContent = '🔄 扫描中...';
+    document.getElementById('startBtn').innerHTML = '🔄 扫描中<br><small style="font-size:11px;font-weight:400;opacity:.7">scanning...</small>';
     document.getElementById('startBtn').disabled = true;
     document.getElementById('albumBtn').disabled = true;
     document.getElementById('previewFrame').style.display = 'none';
@@ -212,7 +212,7 @@ function handleAlbumFile(file) {
 
       currentMode = 'album_scanning';
       document.getElementById('startBtn').disabled = true;
-      document.getElementById('albumBtn').textContent = '🔄 识别中...';
+      document.getElementById('albumBtn').innerHTML = '🔄 识别中<br><small style="font-size:11px;font-weight:400;opacity:.7">recognizing...</small>';
       document.getElementById('albumBtn').disabled = true;
       document.getElementById('resetBtn').style.display = 'inline-block';
       updateStatus('scanning', '正在识别相册图片...');
@@ -350,9 +350,9 @@ function stopCamera() {
 }
 
 function resetButtons() {
-  document.getElementById('startBtn').textContent = '🎯 拍照扫描';
+  document.getElementById('startBtn').innerHTML = '🎯 拍照识别<br><small style="font-size:11px;font-weight:400;opacity:.7">photo recognition</small>';
   document.getElementById('startBtn').disabled = false;
-  document.getElementById('albumBtn').textContent = '📁 从相册选择';
+  document.getElementById('albumBtn').innerHTML = '📁 从相册选择<br><small style="font-size:11px;font-weight:400;opacity:.7">Select from album</small>';
   document.getElementById('albumBtn').disabled = false;
 }
 
