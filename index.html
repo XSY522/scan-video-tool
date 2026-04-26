@@ -6,10 +6,11 @@
 <title>Scan Video - 扫图跳转</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0a0a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+body{background:#0a0a0a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow-x:hidden;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
 #container{position:relative;width:100%;max-width:500px;text-align:center;padding:0 16px}
+.version{font-size:11px;color:#444;margin-bottom:4px}
 .scan-frame{position:relative;width:280px;height:280px;border-radius:16px;border:3px solid rgba(0,200,255,0.5);margin:0 auto 20px;overflow:hidden;background:#111}
-.scan-line{position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,#00c8ff,transparent);animation:scan 2s linear infinite}
+.scan-line{position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,#00c8ff,transparent);animation:scan 2s linear infinite;z-index:5}
 @keyframes scan{0%{top:0}50%{top:calc(100% - 2px)}100%{top:0}}
 video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
 canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2}
@@ -24,7 +25,11 @@ h1{font-size:22px;font-weight:700;margin-bottom:6px}
 .dot.scanning{background:#00c8ff;animation:pulse 1s infinite}
 .dot.error{background:#ff4444}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-#startBtn{padding:14px 36px;font-size:17px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:30px;cursor:pointer;font-weight:600;margin-bottom:20px}
+.btn-group{display:flex;gap:10px;justify-content:center;margin-bottom:20px;flex-wrap:wrap}
+#startBtn{padding:14px 28px;font-size:16px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:30px;cursor:pointer;font-weight:600}
+#albumBtn{padding:14px 28px;font-size:16px;background:linear-gradient(135deg,#11998e,#38ef7d);color:#fff;border:none;border-radius:30px;cursor:pointer;font-weight:600}
+#resetBtn{padding:10px 20px;font-size:13px;background:#333;color:#aaa;border:1px solid #444;border-radius:20px;cursor:pointer;display:none;margin-bottom:12px}
+#resetBtn:hover{border-color:#888;color:#fff}
 .thumb-row{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:8px}
 .thumb-item{width:44px;height:44px;border-radius:8px;object-fit:cover;border:2px solid #333;cursor:pointer;transition:.2s}
 .thumb-item:hover,.thumb-item.active{border-color:#00c8ff}
@@ -35,27 +40,36 @@ h1{font-size:22px;font-weight:700;margin-bottom:6px}
 #resultCard p{font-size:13px;color:#666;margin-bottom:16px}
 .btn-primary{display:inline-block;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:13px 32px;border-radius:30px;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer;border:none}
 .btn-secondary{display:inline-block;background:#f0f0f0;color:#333;padding:11px 24px;border-radius:24px;font-size:13px;text-decoration:none;cursor:pointer;border:none;margin-top:8px}
+#albumInput{display:none}
 </style>
 </head>
 <body>
 
 <div id="container">
+  <div class="version">v2.0</div>
   <div class="scan-frame" id="scanFrame">
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
     <img id="previewFrame" alt="">
-    <div class="scan-line"></div>
+    <div class="scan-line" id="scanLine"></div>
   </div>
 
   <h1>📷 扫图识视频</h1>
-  <p class="subtitle">对准图片，自动识别并跳转视频</p>
+  <p class="subtitle">对准图片或从相册选择，自动识别并跳转视频</p>
 
   <div id="statusBar">
     <span class="dot" id="dot"></span>
     <span id="statusText">加载中...</span>
   </div>
 
-  <button id="startBtn" onclick="startCamera()">🎯 开始扫描</button>
+  <div class="btn-group">
+    <button id="startBtn" onclick="startCamera()">🎯 拍照扫描</button>
+    <button id="albumBtn" onclick="openAlbum()">📁 从相册选择</button>
+  </div>
+
+  <button id="resetBtn" onclick="resetToIdle()">↩ 返回</button>
+
+  <input type="file" id="albumInput" accept="image/*" onchange="handleAlbumFile(this.files[0])">
 
   <div class="thumb-row" id="thumbRow"></div>
 </div>
@@ -72,18 +86,18 @@ h1{font-size:22px;font-weight:700;margin-bottom:6px}
 
 <script>
 // Supabase config (anon key is public-safe with RLS)
-const SB_URL = 'https://oapnoqskorgwpaqxrubf.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hcG5vcXNrb3Jnd3BhcXhydWJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMjgyMTksImV4cCI6MjA5MjcwNDIxOX0.cZ5LuZ6ruOsx5TZurFxsp1p_5pjr--jIM_PXTC_EgTY';
+var SB_URL = 'https://oapnoqskorgwpaqxrubf.supabase.co';
+var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hcG5vcXNrb3Jnd3BhcXhydWJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMjgyMTksImV4cCI6MjA5MjcwNDIxOX0.cZ5LuZ6ruOsx5TZurFxsp1p_5pjr--jIM_PXTC_EgTY';
 
-let video, canvas, ctx, stream;
-let items = [];
-let matchCount = {};
-let currentMode = 'idle';
-const MATCH_THRESHOLD = 0.78;
-const MATCH_REQUIRED = 4;
+var video, canvas, ctx, stream;
+var items = [];
+var matchCount = {};
+var currentMode = 'idle';
+var MATCH_THRESHOLD = 0.78;
+var MATCH_REQUIRED = 4;
 
 function updateStatus(state, text) {
-  const dot = document.getElementById('dot');
+  var dot = document.getElementById('dot');
   dot.className = 'dot';
   if (state === 'active') dot.classList.add('active');
   else if (state === 'scanning') dot.classList.add('scanning');
@@ -94,12 +108,12 @@ function updateStatus(state, text) {
 // Load items from Supabase
 async function loadItems() {
   try {
-    const r = await fetch(`${SB_URL}/rest/v1/scan_items?active=eq.true&select=id,title,image_data,video_url&order=created_at.desc&limit=50`, {
+    var r = await fetch(SB_URL + '/rest/v1/scan_items?active=eq.true&select=id,title,image_data,video_url&order=created_at.desc&limit=50', {
       headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
     });
     if (r.ok) {
-      const data = await r.json();
-      items = data.map(i => ({ id: i.id, title: i.title, image: i.image_data, videoUrl: i.video_url }));
+      var data = await r.json();
+      items = data.map(function(i) { return { id: i.id, title: i.title, image: i.image_data, videoUrl: i.video_url }; });
     } else {
       items = [];
     }
@@ -107,7 +121,7 @@ async function loadItems() {
     if (items.length === 0) {
       updateStatus('idle', '暂无扫描项目，请先在后台添加');
     } else {
-      updateStatus('idle', `已加载 ${items.length} 个项目`);
+      updateStatus('idle', '已加载 ' + items.length + ' 个项目');
     }
   } catch (e) {
     updateStatus('error', '加载失败');
@@ -116,18 +130,19 @@ async function loadItems() {
 }
 
 function renderThumbs() {
-  const row = document.getElementById('thumbRow');
+  var row = document.getElementById('thumbRow');
   row.innerHTML = '';
-  items.forEach((item, i) => {
-    const img = document.createElement('img');
+  items.forEach(function(item, i) {
+    var img = document.createElement('img');
     img.src = item.image;
     img.className = 'thumb-item';
     img.title = item.title || ('视频 ' + (i + 1));
-    img.onclick = () => showResult(item);
+    img.onclick = function() { showResult(item); };
     row.appendChild(img);
   });
 }
 
+// ===== Camera scanning =====
 async function startCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -140,13 +155,17 @@ async function startCamera() {
     ctx = canvas.getContext('2d');
     currentMode = 'scanning';
     document.getElementById('startBtn').textContent = '🔄 扫描中...';
-    updateStatus('scanning', '正在扫描...请对准图片');
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('albumBtn').disabled = true;
     document.getElementById('previewFrame').style.display = 'none';
+    document.getElementById('resetBtn').style.display = 'inline-block';
     video.classList.remove('hidden');
+    document.getElementById('scanLine').style.display = '';
+    updateStatus('scanning', '正在扫描...请对准图片');
     requestAnimationFrame(scanLoop);
   } catch (e) {
     updateStatus('error', '摄像头权限被拒绝');
-    alert('无法访问摄像头：' + e.message + '\n请允许摄像头权限后重试');
+    alert('无法访问摄像头：' + e.message + '\n可以试试「从相册选择」');
   }
 }
 
@@ -159,16 +178,93 @@ function scanLoop() {
   requestAnimationFrame(scanLoop);
 }
 
+// ===== Album scanning =====
+function openAlbum() {
+  document.getElementById('albumInput').click();
+}
+
+function handleAlbumFile(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    updateStatus('error', '请选择图片文件');
+    return;
+  }
+
+  // Stop camera if running
+  stopCamera();
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      // Show preview in scan frame
+      var preview = document.getElementById('previewFrame');
+      preview.src = e.target.result;
+      preview.style.display = 'block';
+      document.getElementById('video').classList.add('hidden');
+      document.getElementById('scanLine').style.display = 'none';
+
+      // Draw to canvas for comparison
+      canvas = document.getElementById('canvas');
+      ctx = canvas.getContext('2d');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+
+      currentMode = 'album_scanning';
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('albumBtn').textContent = '🔄 识别中...';
+      document.getElementById('albumBtn').disabled = true;
+      document.getElementById('resetBtn').style.display = 'inline-block';
+      updateStatus('scanning', '正在识别相册图片...');
+
+      // Run single-pass comparison
+      compareAlbumImage();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function compareAlbumImage() {
+  if (items.length === 0) {
+    updateStatus('error', '暂无扫描项目');
+    resetButtons();
+    return;
+  }
+
+  var srcFeat = getFeatures(canvas);
+  var bestMatch = null;
+  var bestScore = 0;
+
+  for (var i = 0; i < items.length; i++) {
+    var sim = await compareWithImage(items[i].image, srcFeat);
+    if (sim > bestScore) {
+      bestScore = sim;
+      bestMatch = items[i];
+    }
+  }
+
+  if (bestMatch && bestScore >= MATCH_THRESHOLD) {
+    updateStatus('active', '✅ 识别成功！匹配度 ' + Math.round(bestScore * 100) + '%');
+    showResult(bestMatch);
+  } else {
+    var hint = bestScore > 0.5 ? '（最接近的匹配度：' + Math.round(bestScore * 100) + '%）' : '';
+    updateStatus('error', '未识别到匹配项目 ' + hint);
+    resetButtons();
+  }
+}
+
+// ===== Shared logic =====
 function getFeatures(sourceCanvas) {
-  const w = sourceCanvas.width, h = sourceCanvas.height;
-  const imgData = ctx.getImageData(0, 0, w, h).data;
-  const step = Math.max(1, Math.floor(w * h / 5000));
-  let rS = 0, gS = 0, bS = 0, cnt = 0, edgeS = 0;
-  for (let y = 1; y < h - 1; y += step) {
-    for (let x = 1; x < w - 1; x += step) {
-      const i = (y * w + x) * 4;
+  var w = sourceCanvas.width, h = sourceCanvas.height;
+  var imgData = ctx.getImageData(0, 0, w, h).data;
+  var step = Math.max(1, Math.floor(w * h / 5000));
+  var rS = 0, gS = 0, bS = 0, cnt = 0, edgeS = 0;
+  for (var y = 1; y < h - 1; y += step) {
+    for (var x = 1; x < w - 1; x += step) {
+      var i = (y * w + x) * 4;
       rS += imgData[i]; gS += imgData[i+1]; bS += imgData[i+2]; cnt++;
-      const diff = Math.abs(imgData[i]-imgData[(y+1)*w*4]) + Math.abs(imgData[i]-imgData[i+4]);
+      var diff = Math.abs(imgData[i]-imgData[(y+1)*w*4]) + Math.abs(imgData[i]-imgData[i+4]);
       if (diff > 40) edgeS++;
     }
   }
@@ -176,47 +272,48 @@ function getFeatures(sourceCanvas) {
 }
 
 async function compareWithImage(targetDataUrl, srcFeat) {
-  return new Promise(resolve => {
-    const img = new Image();
+  return new Promise(function(resolve) {
+    var img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const c = document.createElement('canvas');
+    img.onload = function() {
+      var c = document.createElement('canvas');
       c.width = img.width; c.height = img.height;
-      const tctx = c.getContext('2d');
+      var tctx = c.getContext('2d');
       tctx.drawImage(img, 0, 0);
-      const w = c.width, h = c.height;
-      const data = tctx.getImageData(0, 0, w, h).data;
-      const step = Math.max(1, Math.floor(w * h / 5000));
-      let rS = 0, gS = 0, bS = 0, cnt = 0, edgeS = 0;
-      for (let y = 1; y < h - 1; y += step) {
-        for (let x = 1; x < w - 1; x += step) {
-          const i = (y * w + x) * 4;
+      var w = c.width, h = c.height;
+      var data = tctx.getImageData(0, 0, w, h).data;
+      var step = Math.max(1, Math.floor(w * h / 5000));
+      var rS = 0, gS = 0, bS = 0, cnt = 0, edgeS = 0;
+      for (var y = 1; y < h - 1; y += step) {
+        for (var x = 1; x < w - 1; x += step) {
+          var i = (y * w + x) * 4;
           rS += data[i]; gS += data[i+1]; bS += data[i+2]; cnt++;
-          const diff = Math.abs(data[i]-data[(y+1)*w*4]) + Math.abs(data[i]-data[i+4]);
+          var diff = Math.abs(data[i]-data[(y+1)*w*4]) + Math.abs(data[i]-data[i+4]);
           if (diff > 40) edgeS++;
         }
       }
-      const tAvg = [rS/cnt, gS/cnt, bS/cnt];
-      const tEdge = edgeS / cnt;
-      const colorDiff = Math.abs(srcFeat.avg[0]-tAvg[0]) + Math.abs(srcFeat.avg[1]-tAvg[1]) + Math.abs(srcFeat.avg[2]-tAvg[2]);
-      const colorSim = Math.max(0, 1 - colorDiff / 400);
-      const edgeDiff = Math.abs(srcFeat.edge - tEdge);
-      const edgeSim = Math.max(0, 1 - edgeDiff / 0.15);
+      var tAvg = [rS/cnt, gS/cnt, bS/cnt];
+      var tEdge = edgeS / cnt;
+      var colorDiff = Math.abs(srcFeat.avg[0]-tAvg[0]) + Math.abs(srcFeat.avg[1]-tAvg[1]) + Math.abs(srcFeat.avg[2]-tAvg[2]);
+      var colorSim = Math.max(0, 1 - colorDiff / 400);
+      var edgeDiff = Math.abs(srcFeat.edge - tEdge);
+      var edgeSim = Math.max(0, 1 - edgeDiff / 0.15);
       resolve(colorSim * 0.5 + edgeSim * 0.5);
     };
-    img.onerror = () => resolve(0);
+    img.onerror = function() { resolve(0); };
     img.src = targetDataUrl;
   });
 }
 
 async function compareAll(sourceCanvas) {
   if (items.length === 0) return;
-  const srcFeat = getFeatures(sourceCanvas);
-  for (const item of items) {
-    const sim = await compareWithImage(item.image, srcFeat);
+  var srcFeat = getFeatures(sourceCanvas);
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var sim = await compareWithImage(item.image, srcFeat);
     if (sim >= MATCH_THRESHOLD) {
       matchCount[item.id] = (matchCount[item.id] || 0) + 1;
-      updateStatus('scanning', `识别中 ${matchCount[item.id]}/${MATCH_REQUIRED}`);
+      updateStatus('scanning', '识别中 ' + matchCount[item.id] + '/' + MATCH_REQUIRED);
       if (matchCount[item.id] >= MATCH_REQUIRED) {
         matchCount = {};
         showResult(item);
@@ -230,7 +327,7 @@ async function compareAll(sourceCanvas) {
 
 function showResult(item) {
   currentMode = 'idle';
-  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  stopCamera();
   document.getElementById('resultImg').src = item.image;
   document.getElementById('resultTitle').textContent = item.title || '找到视频';
   document.getElementById('watchBtn').href = item.videoUrl;
@@ -242,9 +339,33 @@ function showResult(item) {
 function closeResult() {
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('resultCard').style.display = 'none';
-  updateStatus('idle', '点击下方按钮继续扫描');
-  document.getElementById('startBtn').textContent = '🎯 开始扫描';
+  resetToIdle();
+}
+
+function stopCamera() {
+  if (stream) {
+    stream.getTracks().forEach(function(t) { t.stop(); });
+    stream = null;
+  }
+}
+
+function resetButtons() {
+  document.getElementById('startBtn').textContent = '🎯 拍照扫描';
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('albumBtn').textContent = '📁 从相册选择';
+  document.getElementById('albumBtn').disabled = false;
+}
+
+function resetToIdle() {
+  stopCamera();
+  currentMode = 'idle';
   matchCount = {};
+  resetButtons();
+  document.getElementById('previewFrame').style.display = 'none';
+  document.getElementById('scanLine').style.display = '';
+  document.getElementById('resetBtn').style.display = 'none';
+  document.getElementById('albumInput').value = '';
+  updateStatus('idle', '已加载 ' + items.length + ' 个项目');
 }
 
 loadItems();
